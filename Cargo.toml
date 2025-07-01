@@ -1,0 +1,10 @@
+[package]
+name = "BlockOps"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy = { version = "1.0.16", features = ["full"] }
+clap = { version = "4.5.40", features = ["cargo"] }
+dotenv = "0.15.0"
+tokio = { version = "1.45.1", features = ["full"] }
