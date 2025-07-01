@@ -1,8 +1,8 @@
 use alloy::{
     network::TransactionBuilder,
-    primitives::{U256, Uint},
+    primitives::U256,
     providers::{Provider, ProviderBuilder},
-    rpc::{self, types::TransactionRequest},
+    rpc::{types::TransactionRequest},
     signers::local::PrivateKeySigner,
     transports::http::reqwest::Url,
 };
@@ -100,10 +100,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         && wallet_address_to_send_ether != "empty"
         && amount_of_ether != "empty"
     {
-        println!(
-            "{:?} {:?} {:?}",
-            private_key, wallet_address_to_send_ether, amount_of_ether
-        );
+        // println!(
+        //     "{:?} {:?} {:?}",
+        //     private_key, wallet_address_to_send_ether, amount_of_ether
+        // );
         let private_key: PrivateKeySigner = private_key.parse()?;
 
         let provider = ProviderBuilder::new()
@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let tx = TransactionRequest::default()
             .with_to(wallet_address_to_send_ether.parse()?)
             .with_value(U256::from(
-                amount_of_ether
+                "10000000000000000"
                     .parse::<U256>()
                     .expect("Invalid U256 string"),
             ))
