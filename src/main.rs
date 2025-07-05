@@ -1,16 +1,25 @@
 use alloy::{
     network::TransactionBuilder,
-    primitives::U256,
+    primitives::{Address, U256, address},
     providers::{Provider, ProviderBuilder},
-    rpc::{types::TransactionRequest},
+    rpc::types::TransactionRequest,
     signers::local::PrivateKeySigner,
+    sol,
     transports::http::reqwest::Url,
 };
 use clap::{Arg, Command, command};
 use core::panic;
-use std::error::Error;
 use dotenv::dotenv;
-use std::env;
+use std::error::Error;
+use std::{env, str::FromStr};
+
+sol! {
+   // The `rpc` attribute enables contract interaction via the provider.
+   #[sol(rpc)]
+   contract ERC20 {
+        function balanceOf(address owner) public view returns (uint256);
+   }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .long("wallet-address")
                         .short('w')
                         .required(true)
-                        .conflicts_with_all(["private-key", "address-to-send-ether", "amount-to-send"])
+                        .conflicts_with_all([
+                            "private-key",
+                            "address-to-send-ether",
+                            "amount-to-send",
+                        ])
                         .help("wallet address to check ether balance"),
                 )
                 .arg(
@@ -51,40 +64,56 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .help("amount of ether to send..."),
                 ),
         )
+        .subcommand(
+            Command::new("erc20-token-interaction")
+                .arg(
+                    Arg::new("token-address")
+                        .long("token-address")
+                        .short('t')
+                        .required(true)
+                        .help("contract address of erc20 token"),
+                )
+                .arg(
+                    Arg::new("token-holder")
+                        .long("token-holder")
+                        .short('u')
+                        .required(true)
+                        .help("token holder address to check balance"),
+                ),
+        )
+        .about(
+            "web3 all in one comprehensive cli tool for interacting with the ethereum blockchain",
+        )
         .get_matches();
+
+    // ETHER TRANSACTION OPERATION
+    let empty = String::from("empty");
 
     let ether_transaction = match_result.subcommand_matches("ether-transaction");
 
-    let wallet_address = match ether_transaction
-        .unwrap_or_else(|| panic!("No wallet address found"))
-        .get_one::<String>("wallet-address")
-    {
-        Some(x) => x,
-        _ => "empty",
-    };
-    let private_key = match ether_transaction.unwrap_or_else(|| panic!("No private key found")) .get_one::<String>("private-key") {
-        Some(x) => x,
+    let wallet_address = match ether_transaction {
+        Some(x) => x.get_one::<String>("wallet-address").unwrap_or(&empty),
         _ => "empty",
     };
 
-    let wallet_address_to_send_ether = match ether_transaction
-        .unwrap()
-        .get_one::<String>("address-to-send-ether")
-    {
-        Some(x) => x,
+    let private_key = match ether_transaction {
+        Some(x) => x.get_one::<String>("private-key").unwrap_or(&empty),
         _ => "empty",
     };
 
-    let amount_of_ether = match ether_transaction
-        .unwrap()
-        .get_one::<String>("amount-to-send")
-    {
-        Some(x) => x,
+    let wallet_address_to_send_ether = match ether_transaction {
+        Some(x) => x
+            .get_one::<String>("address-to-send-ether")
+            .unwrap_or(&empty),
         _ => "empty",
     };
 
-    let rpc_url: Url =
-        rpc_endpoint.parse()?;
+    let amount_of_ether = match ether_transaction {
+        Some(x) => x.get_one::<String>("amount-to-send").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    let rpc_url: Url = rpc_endpoint.parse()?;
 
     let provider = ProviderBuilder::new().connect_http(rpc_url.clone());
 
@@ -100,16 +129,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         && wallet_address_to_send_ether != "empty"
         && amount_of_ether != "empty"
     {
-        // println!(
-        //     "{:?} {:?} {:?}",
-        //     private_key, wallet_address_to_send_ether, amount_of_ether
-        // );
         let private_key: PrivateKeySigner = private_key.parse()?;
 
         let provider = ProviderBuilder::new()
             .wallet(private_key)
             .connect_http(rpc_url.clone());
-
 
         let tx = TransactionRequest::default()
             .with_to(wallet_address_to_send_ether.parse()?)
@@ -121,14 +145,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .with_gas_price(20_000_000_000)
             .with_gas_limit(21_000);
 
-
         let pending_tx = provider.send_transaction(tx).await?;
 
         println!("Pending transaction hash.... {}", pending_tx.tx_hash());
 
         let reciept = pending_tx.get_receipt().await?;
 
-        println!("Transaction successfull and included in block number {}", reciept.block_number.expect("Failed to get the block number..."))
+        println!(
+            "Transaction successfull and included in block number {}",
+            reciept
+                .block_number
+                .expect("Failed to get the block number...")
+        )
+    }
+
+    // ERC20 TRANSACTION OPERATION
+    let ether_transaction = match_result.subcommand_matches("erc20-token-interaction");
+
+    let token_address = match ether_transaction {
+        Some(x) => x.get_one::<String>("token-address").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    let token_holder = match ether_transaction {
+        Some(x) => x.get_one::<String>("token-holder").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    if token_address != "empty" && token_holder != "empty" {
+        let token_contract_address = Address::from_str(token_address).unwrap();
+
+        let erc20 = ERC20::new(token_contract_address, provider);
+
+        let token_holder_address = Address::from_str(token_holder).unwrap();
+        let token_balance = erc20.balanceOf(token_holder_address).call().await?;
+
+        println!("Token balance for user is: {}", token_balance);
     }
 
     Ok(())
