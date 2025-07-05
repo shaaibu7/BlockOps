@@ -18,6 +18,7 @@ sol! {
    #[sol(rpc)]
    contract ERC20 {
         function balanceOf(address owner) public view returns (uint256);
+        function allowance(address owner, address spender) external view returns (uint256);
    }
 }
 
@@ -78,7 +79,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .long("token-holder")
                         .short('u')
                         .required(true)
+                        .conflicts_with_all(["token-owner", "token-spender"])
                         .help("token holder address to check balance"),
+                )
+                .arg(
+                    Arg::new("token-owner")
+                        .long("token-owner")
+                        .short('o')
+                        .required(true)
+                        .help("token owner address to check for allowance"),
+                )
+                .arg(
+                    Arg::new("token-spender")
+                        .long("token-spender")
+                        .short('s')
+                        .required(true)
+                        .help("token spender address to check for allowance"),
                 ),
         )
         .about(
@@ -160,14 +176,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // ERC20 TRANSACTION OPERATION
-    let ether_transaction = match_result.subcommand_matches("erc20-token-interaction");
+    let token_transaction = match_result.subcommand_matches("erc20-token-interaction");
 
-    let token_address = match ether_transaction {
+    let token_address = match token_transaction {
         Some(x) => x.get_one::<String>("token-address").unwrap_or(&empty),
         _ => "empty",
     };
 
-    let token_holder = match ether_transaction {
+    // Checking balance
+    let token_holder = match token_transaction {
         Some(x) => x.get_one::<String>("token-holder").unwrap_or(&empty),
         _ => "empty",
     };
@@ -175,12 +192,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if token_address != "empty" && token_holder != "empty" {
         let token_contract_address = Address::from_str(token_address).unwrap();
 
-        let erc20 = ERC20::new(token_contract_address, provider);
+        let erc20 = ERC20::new(token_contract_address, provider.clone());
 
         let token_holder_address = Address::from_str(token_holder).unwrap();
         let token_balance = erc20.balanceOf(token_holder_address).call().await?;
 
         println!("Token balance for user is: {}", token_balance);
+    }
+
+    // Checking token allowance
+    let token_owner = match token_transaction {
+        Some(x) => x.get_one::<String>("token-owner").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    let token_spender = match token_transaction {
+        Some(x) => x.get_one::<String>("token-spender").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    if token_owner != "empty" && token_spender != "empty" {
+        if token_address != "empty" {
+            let token_contract_address = Address::from_str(token_address).unwrap();
+
+            let erc20 = ERC20::new(token_contract_address, provider);
+
+            let token_owner_address = Address::from_str(token_owner).unwrap();
+            let token_spender_address = Address::from_str(token_spender).unwrap();
+            let token_balance = erc20.allowance(token_owner_address,  token_spender_address).call().await?;
+
+            println!("Token allowance for spender is: {}", token_balance);
+           
+        }
     }
 
     Ok(())
