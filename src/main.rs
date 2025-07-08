@@ -19,6 +19,9 @@ sol! {
    contract ERC20 {
         function balanceOf(address owner) public view returns (uint256);
         function allowance(address owner, address spender) external view returns (uint256);
+        function transfer(address to, uint256 value) external returns (bool);
+        function approve(address spender, uint256 value) external returns (bool);
+        function transferFrom(address from, address to, uint256 value) external returns (bool);
    }
 }
 
@@ -27,6 +30,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();
 
     let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
+    let private_key = env::var("PRIVATE_KEY").unwrap_or_else(|_| panic!("Private key not found"));
+    let rpc_url: Url = rpc_endpoint.parse()?;
+
+    let private_key: PrivateKeySigner = private_key.parse()?;
+
+    let provider_signer = ProviderBuilder::new()
+            .wallet(private_key)
+            .connect_http(rpc_url.clone());
 
     let match_result = command!()
         .subcommand(
@@ -79,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .long("token-holder")
                         .short('u')
                         .required(true)
-                        .conflicts_with_all(["token-owner", "token-spender"])
+                        .conflicts_with_all(["token-owner", "token-spender", "token-recipient", "transfer-amount"])
                         .help("token holder address to check balance"),
                 )
                 .arg(
@@ -95,7 +106,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .short('s')
                         .required(true)
                         .help("token spender address to check for allowance"),
-                ),
+                )
+                .arg(
+                    Arg::new("token-recipient")
+                        .long("token-recipient")
+                        .short('r')
+                        .required(true)
+                        .conflicts_with_all(["token-owner", "token-spender"])
+                        .help("address of token recipient in transfer operation"),
+                )
+                .arg(
+                    Arg::new("transfer-amount")
+                        .long("transfer-amount")
+                        .short('a')
+                        .required(true)
+                        .conflicts_with_all(["token-owner", "token-spender"])
+                        .help("address of token recipient in transfer operation"),
+                )
         )
         .about(
             "web3 all in one comprehensive cli tool for interacting with the ethereum blockchain",
@@ -129,7 +156,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         _ => "empty",
     };
 
-    let rpc_url: Url = rpc_endpoint.parse()?;
 
     let provider = ProviderBuilder::new().connect_http(rpc_url.clone());
 
@@ -224,6 +250,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Token allowance for spender is: {}", token_balance);
            
         }
+    }
+
+
+    // Integrating erc20 token contract write ops
+    let token_recipient = match token_transaction {
+        Some(x) => x.get_one::<String>("token-recipient").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+    let transfer_amount = match token_transaction {
+        Some(x) => x.get_one::<String>("transfer-amount").unwrap_or(&empty),
+        _ => "empty",
+    };
+
+
+    if token_recipient != "empty" && transfer_amount != "empty" && token_address != "empty" {
+        let transfer_amount_transform = U256::from_str_radix(transfer_amount, 10).unwrap();
+        let transfer_data = transfer_amount_transform.wrapping_mul(U256::from(10e5));
+        let token_contract_address = Address::from_str(token_address).unwrap();
+
+        println!("The transformed data is {}", transfer_data);
+
+        let erc20 = ERC20::new(token_contract_address, provider_signer);
+
+        let token_recipient_transform = Address::from_str(token_recipient).unwrap();
+        let transfer_tx = erc20.transfer(token_recipient_transform, transfer_data).send().await?;
+        let reciept_tx = transfer_tx.get_receipt().await?;
+
+        println!("Transfer transaction completed successfully and tx hash is {}", reciept_tx.transaction_hash);
     }
 
     Ok(())
