@@ -1,10 +1,12 @@
 [package]
-name = "BlockOps"
+name = "blockops"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 alloy = { version = "1.0.16", features = ["full"] }
 clap = { version = "4.5.40", features = ["cargo"] }
 dotenv = "0.15.0"
 tokio = { version = "1.45.1", features = ["full"] }
+regex = "1.10.2"
+hex = "0.4.3"
