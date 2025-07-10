@@ -172,6 +172,16 @@ pub fn build_cli() -> Command {
                 ),
         )
         .about("web3 all in one comprehensive cli tool for interacting with the ethereum blockchain")
+        .subcommand(
+        Command::new("chat")
+        .arg(
+        Arg::new("cmd_arg")
+        .long("message")
+        .short('m')
+        .required(true)
+        .help("Command line arguments from the terminal")
+        ))
+
 }
 
 pub fn parse_ethereum_config(matches: &ArgMatches) -> Option<(Option<String>, Option<(String, EthereumConfig)>)> {
