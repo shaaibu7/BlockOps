@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use reqwest::header::MaxSizeReached;
 use std::error::Error;
 use std::{env, process};
 use alloy::transports::http::reqwest::Url;
@@ -19,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Load environment variables
     let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
     let env_private_key = env::var("PRIVATE_KEY").unwrap_or_else(|_| panic!("Private key not found"));
-    let api_key = env::var("OPEN_AI_API_KEY")?;
+     let api_key = env::var("OPEN_AI_API_KEY")?;
     let open_ai_url = env::var("OPEN_AI_URL")?;
     let  skin = MadSkin::default();
     // Validate environment private key
@@ -74,11 +75,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let provider = utils::setup_provider(&rpc_url).await?;
         blockchain::query_block(&provider, config).await?;
     }
-
-
-
-    match  matches.subcommand() {
-        Some(("chat", arg_matches)) => {
+    
+    if let  Some(("chat", arg_matches)) = matches.subcommand() {
             if let Some(cmd_argument) = arg_matches.get_one::<String>("cmd_arg"){
             let body =    OPenAiRequest{
                 model: "gpt-4o-mini".to_string(),
@@ -102,11 +100,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let content = json_response["choices"][0]["message"]["content"].as_str().unwrap_or("No response from open AI");
             skin.print_text(content);
             }
-        },
-        _ => {
-            eprintln!("Invalid input ");
-            process::exit(1);
-        }
+        
     }
 
     Ok(())
