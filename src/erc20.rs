@@ -124,7 +124,7 @@ pub async fn transfer_tokens(
     // Convert amount to proper format (assuming 18 decimals for ERC20)
     let transfer_amount_transform = match validated_transfer_amount.parse::<f64>() {
         Ok(amount) => {
-            let amount_with_decimals = utils::token_to_smallest_unit(amount, 18)?;
+            let amount_with_decimals = utils::token_to_smallest_unit(amount, 6)?;
             U256::from(amount_with_decimals)
         }
         Err(_) => {
