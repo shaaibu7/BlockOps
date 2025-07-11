@@ -1,12 +1,18 @@
 use dotenv::dotenv;
+use reqwest::header::MaxSizeReached;
 use std::error::Error;
-use std::env;
+use std::{env, process};
 use alloy::transports::http::reqwest::Url;
 
 use blockops::{
     validation, utils, ethereum, erc20, blockchain, cli
 };
-
+use blockops::types::{
+    MessageResponse,
+    OPenAiRequest
+};
+use reqwest::Client;
+use termimad::MadSkin;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();
@@ -14,7 +20,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Load environment variables
     let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
     let env_private_key = env::var("PRIVATE_KEY").unwrap_or_else(|_| panic!("Private key not found"));
-    
+     let api_key = env::var("OPEN_AI_API_KEY")?;
+    let open_ai_url = env::var("OPEN_AI_URL")?;
+    let  skin = MadSkin::default();
     // Validate environment private key
     let validated_env_private_key = match validation::validate_private_key(&env_private_key) {
         Ok(key) => key,
@@ -66,6 +74,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(config) = cli::parse_block_query_config(&matches) {
         let provider = utils::setup_provider(&rpc_url).await?;
         blockchain::query_block(&provider, config).await?;
+    }
+    
+    if let  Some(("chat", arg_matches)) = matches.subcommand() {
+            if let Some(cmd_argument) = arg_matches.get_one::<String>("cmd_arg"){
+            let body =    OPenAiRequest{
+                model: "gpt-4o-mini".to_string(),
+                messages: vec![
+                    MessageResponse{
+                       role:  "user".to_string(),
+                        content: cmd_argument.clone()
+                    }
+                ]
+            };
+            let client = Client::new();
+
+            let res = client
+            .post(open_ai_url)
+            .bearer_auth(api_key)
+            .json(&body)
+            .send()
+            .await?;
+
+            let json_response:  serde_json::Value = res.json().await?;
+            let content = json_response["choices"][0]["message"]["content"].as_str().unwrap_or("No response from open AI");
+            skin.print_text(content);
+            }
+        
     }
 
     Ok(())
