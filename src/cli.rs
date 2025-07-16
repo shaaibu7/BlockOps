@@ -181,6 +181,55 @@ pub fn build_cli() -> Command {
         .required(true)
         .help("Command line arguments from the terminal")
         ))
+        .subcommand(
+                    Command::new("swap")
+                    .arg(
+                    Arg::new("token-in")
+                    .long("from")
+                    .short('f')
+                    .required(true)
+                    .help(" Token A")
+                    )
+                    .arg(
+                        Arg::new("token-out")
+                        .long("to")
+                        .short('t')
+                        .required(true)
+                        .help("Token to recieve")
+                    )
+                    .arg(
+                        Arg::new("amount-in")
+                        .long("amount")
+                        .short('a')
+                        .required(true)
+                    ).arg(
+                    Arg::new("fee-tier")
+                        .long("fee-tier")
+                        .value_name("FEE")
+                        .help("Fee tier (500, 3000, 10000)")
+                        .default_value("3000")
+                )
+                .arg(
+                    Arg::new("slippage-bps")
+                        .long("slippage-bps")
+                        .value_name("BPS")
+                        .help("Slippage tolerance in basis points (100 = 1%)")
+                        .default_value("50")
+                ).arg(
+                    Arg::new("deadline")
+                        .long("deadline")
+                        .value_name("SECONDS")
+                        .help("Transaction deadline in seconds")
+                        .default_value("1800")
+                )
+                .arg(
+                    Arg::new("private-key")
+                        .long("private-key")
+                        .value_name("PRIVATE-KEY")
+                        .help("User private key")
+                        .required(true)
+                )
+                )
 
 }
 
