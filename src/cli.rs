@@ -233,6 +233,7 @@ pub fn build_cli() -> Command {
 
 }
 
+
 pub fn parse_ethereum_config(matches: &ArgMatches) -> Option<(Option<String>, Option<(String, EthereumConfig)>)> {
     if let Some(eth_matches) = matches.subcommand_matches("ether-transaction") {
         let wallet_address = eth_matches.get_one::<String>("wallet-address").map(|s| s.clone());
