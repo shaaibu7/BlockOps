@@ -11,7 +11,7 @@ use blockops::types::{
     OPenAiRequest,
 };
 use blockops::utils::{
-    parse_swap_config
+    interactive_swap_config
 };
 
 use reqwest::Client;
@@ -55,24 +55,7 @@ sol!{
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();
 
-    // Load environment variables
-    let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
-    let env_private_key = env::var("PRIVATE_KEY").unwrap_or_else(|_| panic!("Private key not found"));
-     let api_key = env::var("OPEN_AI_API_KEY")?;
-    let open_ai_url = env::var("OPEN_AI_URL")?;
-    let router_address = env::var("ROUTER_ADDR").unwrap_or_else(|_| panic!("Private Key not found"));
     let  skin = MadSkin::default();
-    // Validate environment private key
-    let validated_env_private_key = match validation::validate_private_key(&env_private_key) {
-        Ok(key) => key,
-        Err(e) => {
-            eprintln!("❌ Environment Variable Validation Error: {}", e);
-            eprintln!("💡 Please check your .env file and ensure PRIVATE_KEY is valid");
-            return Err(Box::new(e) as Box<dyn Error>);
-        }
-    };
-
-    let rpc_url: Url = rpc_endpoint.parse()?;
 
     // Build CLI and parse arguments
     let cli = cli::build_cli();
@@ -80,6 +63,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Handle Ethereum operations
     if let Some((balance_check, transaction_config)) = cli::parse_ethereum_config(&matches) {
+        let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
+        let rpc_url: Url = rpc_endpoint.parse()?;
+        
         if let Some(wallet_address) = balance_check {
             // Check balance
             let provider = utils::setup_provider(&rpc_url).await?;
@@ -93,6 +79,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Handle ERC20 operations
     if let Some((token_address, operation)) = cli::parse_erc20_config(&matches) {
+        let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
+        let rpc_url: Url = rpc_endpoint.parse()?;
+        
         match operation {
             cli::ERC20Operation::CheckBalance(holder_address) => {
                 let provider = utils::setup_provider(&rpc_url).await?;
@@ -103,6 +92,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 erc20::check_allowance(&provider, &token_address, &owner_address, &spender_address).await?;
             }
             cli::ERC20Operation::Transfer(config) => {
+                let env_private_key = env::var("PRIVATE_KEY").unwrap_or_else(|_| panic!("Private key not found"));
+                let validated_env_private_key = match validation::validate_private_key(&env_private_key) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        eprintln!("❌ Environment Variable Validation Error: {}", e);
+                        eprintln!("💡 Please check your .env file and ensure PRIVATE_KEY is valid");
+                        return Err(Box::new(e) as Box<dyn Error>);
+                    }
+                };
                 let provider = utils::setup_provider_with_signer(&rpc_url, &validated_env_private_key).await?;
                 erc20::transfer_tokens(&provider, &token_address, config).await?;
             }
@@ -111,12 +109,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Handle block query operations
     if let Some(config) = cli::parse_block_query_config(&matches) {
+        let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
+        let rpc_url: Url = rpc_endpoint.parse()?;
         let provider = utils::setup_provider(&rpc_url).await?;
         blockchain::query_block(&provider, config).await?;
     }
     
     if let  Some(("chat", arg_matches)) = matches.subcommand() {
             if let Some(cmd_argument) = arg_matches.get_one::<String>("cmd_arg"){
+            let api_key = env::var("OPEN_AI_API_KEY")?;
+            let open_ai_url = env::var("OPEN_AI_URL")?;
+            
             let body =    OPenAiRequest{
                 model: "gpt-4o-mini".to_string(),
                 messages: vec![
@@ -142,9 +145,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         
     }
 
-    if let Some(("swap", swap_matches)) = matches.subcommand(){
+    if let Some(("swap", _)) = matches.subcommand(){
+        println!("\n🚀 Starting Interactive Token Swap...\n");
 
-        let config = parse_swap_config(swap_matches).unwrap();
+        let config = match interactive_swap_config() {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("❌ Error getting swap configuration: {}", e);
+                return Ok(());
+            }
+        };
+
+        let rpc_endpoint = env::var("RPC_URL").unwrap_or_else(|_| panic!("RPC url not found"));
+        let rpc_url: Url = rpc_endpoint.parse()?;
+        let router_address = env::var("ROUTER_ADDR").unwrap_or_else(|_| panic!("Router address not found"));
         let router_addr: Address = router_address.parse().expect("Not a valid addresss");
 
         let private_key : PrivateKeySigner = config.private_key.parse()?;
@@ -154,33 +168,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .connect_http(rpc_url.clone());
         
         let signer_address = private_key.address();
-        println!("Signer address: {:?}", signer_address);
-        println!("Config.recipient: {:?}", config.recipient);
+        println!("\n🔑 Signer address: {:?}", signer_address);
+        println!("📩 Config.recipient: {:?}", config.recipient);
 
         // Check if pool exists first
+        println!("\n🏊 Checking pool existence...");
         let factory = UniswapV3Factory::new("0x0227628f3F023bb0B980b67D528571c95c6DaC1c".parse()?, &provider);
         let fee: u32 = config.fee_tier.try_into().expect("fee_tier too large for u32");
         let fee_uint24 = alloy::primitives::Uint::<24, 1>::from_limbs([fee as u64]);
         let pool = factory.getPool(config.token_in, config.token_out, fee_uint24).call().await?;
-        println!("Pool address: {:?}", pool);
+        println!("🏊 Pool address: {:?}", pool);
         if pool == Address::ZERO {
-            println!("Pool does not exist for this token pair and fee tier!");
-            println!("Try different fee tiers: 500 (0.05%), 3000 (0.3%), 10000 (1%)");
+            println!("❌ Pool does not exist for this token pair and fee tier!");
+            println!("💡 Try different fee tiers: 500 (0.05%), 3000 (0.3%), 10000 (1%)");
             return Ok(());
         }
         
         let router = ISwapRouter::new(router_addr, &provider);
         let erc20 = ERC20::new(config.token_in, provider.clone());
+        
+        println!("\n💰 Checking balances...");
         let balance = erc20.balanceOf(config.recipient).call().await?;
-        println!("USDC Balance: {:?}", balance);
+        println!("💰 USDC Balance: {:?}", balance);
         
         let allowance = erc20.allowance(config.recipient, router_addr).call().await?;
-        println!("Allowance: {:?}", allowance);
+        println!("✅ Allowance: {:?}", allowance);
 
         if allowance < config.amount_in{
-            println!("Owner: {:?}", config.recipient);
+            println!("\n🔐 Approving token spend...");
+            println!("📝 Owner: {:?}", config.recipient);
             let receipt = erc20.approve(router_addr, config.amount_in).send().await?.get_receipt().await?;
-            println!("Approval Transaction Receipt: {:?}", receipt);
+            println!("✅ Approval Transaction Receipt: {:?}", receipt);
         }
 
         let min_amount_out = config.amount_in * U256::from(10000 - config.slippage_bps) / U256::from(10000);
@@ -203,20 +221,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
             amountOutMinimum:min_amount_out,
             sqrtPriceLimitX96: sqrt_price_limit
         };
-        println!("Params: {:?}", params);
+        println!("\n📋 Swap Parameters: {:?}", params);
         
+        println!("\n⛽ Estimating gas...");
         match router.exactInputSingle(params.clone()).estimate_gas().await {
-            Ok(gas_estimate) => println!("Gas Estimate: {:?}", gas_estimate),
+            Ok(gas_estimate) => println!("⛽ Gas Estimate: {:?}", gas_estimate),
             Err(e) => {
-                println!("Gas estimation failed: {:?}", e);
-                // println!("This might indicate the pool has no liquidity or the parameters are invalid");
+                println!("❌ Gas estimation failed: {:?}", e);
+                println!("💡 This might indicate the pool has no liquidity or the parameters are invalid");
                 return Ok(());
             }
         }
         
+        println!("\n🔄 Executing swap...");
         let tx = router.exactInputSingle(params).send().await?;
         let receipt = tx.get_receipt().await?;
-        println!("Swap successful! Transaction hash: {:?}", receipt.transaction_hash);
+        println!("🎉 Swap successful! Transaction hash: {:?}", receipt.transaction_hash);
 
     }
 
