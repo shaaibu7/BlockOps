@@ -1,3 +1,5 @@
+use inquire::error::InquireResult;
+use inquire::{Text, Select, min_length};
 use alloy::{
     network::TransactionBuilder,
     primitives::U256,
@@ -9,6 +11,7 @@ use std::error::Error;
 use crate::validation;
 use crate::utils;
 
+#[derive(Default)]
 pub struct EthereumConfig {
     pub recipient: String,
     pub amount: String,
@@ -26,6 +29,7 @@ pub async fn check_balance(
     // Validate wallet address
     let validated_address = validation::validate_wallet_address(wallet_address)?;
     
+    
     let eth_balance = provider.get_balance(validated_address.parse()?).await?;
     let eth_balance_res = utils::format_balance(eth_balance.to::<u64>(), 18);
     
@@ -34,7 +38,7 @@ pub async fn check_balance(
 }
 
 /// Send ETH transaction
-pub async fn send_transaction(
+pub async fn send_ether(
     provider: &impl Provider,
     private_key: &str,
     config: EthereumConfig,
@@ -113,3 +117,48 @@ pub async fn send_transaction(
 
     Ok(())
 } 
+
+
+
+pub async fn run(provider: &impl Provider) -> InquireResult<()> {
+    let env_private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY not set in .env");
+    let op = Select::new("🪙 Ether Operation", vec![
+        "Check Ether Balance",
+        "Send Ether",
+    ])
+    .with_help_message("Choose an ether operation to perform.")
+    .prompt()?;
+
+    match op.as_ref() {
+        "Check Ether Balance" => {
+            let wallet_address = Text::new("🏷️ Wallet address:")
+                .with_help_message("Paste the wallet address.")
+                .with_validator(min_length!(5, "Must be a valid address"))
+                .prompt()?;
+            
+            check_balance(provider, &wallet_address).await.unwrap();
+        }
+        "Send Ether" => {
+            let recipient_address = Text::new("🏷️ Recipient address:")
+                .with_help_message("Paste the recipient address.")
+                .with_validator(min_length!(5, "Must be a valid address"))
+                .prompt()?;
+
+            let amount = Text::new("🏷️ Amount to send:")
+                .with_help_message("Enter amount of ether to send.")
+                .with_validator(min_length!(1, "Must be a valid amount"))
+                .prompt()?;
+            
+            let config = EthereumConfig {
+                recipient: recipient_address,
+                amount: amount,
+                ..Default::default()
+            };
+
+            send_ether(provider, &env_private_key, config).await.unwrap();
+        }
+        "Back to Main Menu" => {}
+        _ => unreachable!(),
+    }
+    Ok(())
+}
