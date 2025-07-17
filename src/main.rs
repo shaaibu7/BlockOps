@@ -1,7 +1,8 @@
 use alloy::{  providers::ProviderBuilder, signers::local::PrivateKeySigner};
 use alloy::transports::http::reqwest::Url;
  use blockops::{
-    erc20
+    erc20,
+    ether
 };
 use inquire::{Select};
 use inquire::error::InquireResult;
@@ -30,7 +31,7 @@ async fn main() -> InquireResult<()> {
             .prompt()?;
 
         match command.as_ref() {
-            "Ether Transaction" => println!("Ether transaction"),
+            "Ether Transaction" => ether::run(&signer_provider).await?,
             "ERC20 Token" => erc20::run(&signer_provider).await?,
             "DeFi (Swap) " => println!("Defi Transaction"),
             "Chat With AI" => println!(" Chat with AI"),

@@ -1,6 +1,6 @@
 use clap::{Arg, Command, command, ArgMatches};
 
-use crate::ethereum::EthereumConfig;
+use crate::ether::EthereumConfig;
 use crate::erc20::TokenTransferConfig;
 use crate::blockchain::BlockQueryConfig;
 
