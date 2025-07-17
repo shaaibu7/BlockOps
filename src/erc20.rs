@@ -1,3 +1,5 @@
+use inquire::error::InquireResult;
+use inquire::{Text, Select, min_length};
 use alloy::{
     primitives::{Address, U256},
     providers::Provider,
@@ -10,7 +12,6 @@ use crate::validation;
 use crate::utils;
 
 sol! {
-    // The `rpc` attribute enables contract interaction via the provider.
     #[sol(rpc)]
     contract ERC20 {
         function balanceOf(address owner) public view returns (uint256);
@@ -28,6 +29,59 @@ pub struct TokenTransferConfig {
     pub gas_price: Option<String>,
     pub slippage: Option<String>,
 }
+
+pub async fn run(provider: &impl Provider) -> InquireResult<()> {
+    let op = Select::new("🪙 ERC20 Operation", vec![
+        "Check Token Balance",
+        "Check Allowance",
+        "Transfer Tokens",
+        "Back to Main Menu"
+    ])
+    .with_help_message("Choose an ERC20 token operation.")
+    .prompt()?;
+
+    match op.as_ref() {
+        "Check Token Balance" => {
+            let token_address = Text::new("🏷️ Token contract address:")
+                .with_help_message("Paste the ERC20 token contract address.")
+                .with_validator(min_length!(5, "Must be a valid address"))
+                .prompt()?;
+            let holder = Text::new("👤 Token holder address:")
+                .with_help_message("Paste the wallet address to check balance for.")
+                .with_validator(min_length!(5, "Must be a valid address"))
+                .prompt()?;
+            check_balance(provider, &token_address, &holder).await.unwrap();
+        }
+        "Check Allowance" => {
+            let token_address = Text::new("🏷️ Token contract address:").prompt()?;
+            let owner = Text::new("👤 Token owner address:").prompt()?;
+            let spender = Text::new("🤝 Token spender address:").prompt()?;
+            check_allowance(provider, &token_address, &owner, &spender).await.unwrap();
+        }
+        "Transfer Tokens" => {
+            let token_address = Text::new("🏷️ Token contract address:").prompt()?;
+            let recipient = Text::new("📬 Recipient address:").prompt()?;
+            let amount = Text::new("💰 Amount to transfer:").prompt()?;
+            let gas_limit = Some("100000".to_string());
+                
+            let gas_price = Some("200".to_string());
+            let slippage = Some("0.5".to_string());
+
+            let config = TokenTransferConfig {
+                recipient,
+                amount,
+                gas_limit,
+                gas_price,
+                slippage,
+            };
+            transfer_tokens(provider, &token_address, config).await.unwrap();
+        }
+        "Back to Main Menu" => {}
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
 
 /// Check ERC20 token balance
 pub async fn check_balance(
@@ -79,7 +133,7 @@ pub async fn check_allowance(
     Ok(())
 }
 
-/// Transfer ERC20 tokens
+///  Transfer ERC20 tokens
 pub async fn transfer_tokens(
     provider: &impl Provider,
     token_address: &str,
