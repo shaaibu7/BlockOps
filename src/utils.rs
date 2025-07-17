@@ -13,6 +13,7 @@ use clap::{ArgMatches};
 use alloy::{primitives::{U256}, signers::k256::ecdsa::SigningKey};
 use alloy::{hex::decode};
 use alloy::signers::local::LocalSigner;
+use inquire::{Select, Text, CustomType};
 use dotenv::dotenv;
 
 
@@ -142,4 +143,86 @@ pub fn load_tokens_address_from_env() -> HashMap< &'static str, String>{
 
     tokens
 
+}
+
+pub fn interactive_swap_config() -> Result<SwapConfig, Box<dyn Error>> {
+    println!("🔄 Interactive Token Swap Setup");
+    println!("Note: Currently supports USDC → WETH swaps only");
+    
+    let token_addresses = load_tokens_address_from_env();
+    
+    // Token In selection (currently only USDC)
+    let token_in_options = vec!["USDC"];
+    let token_in = Select::new("Select token to swap from:", token_in_options)
+        .prompt()?;
+    
+    // Token Out selection (currently only WETH)
+    let token_out_options = vec!["WETH"];
+    let token_out = Select::new("Select token to swap to:", token_out_options)
+        .prompt()?;
+    
+    // Amount input
+    let amount_input: f64 = CustomType::new("Enter amount to swap (in USDC):")
+        .with_help_message("Enter the amount in USDC (e.g., 100.5)")
+        .prompt()?;
+    
+    // Fee tier selection
+    let fee_options = vec!["500 (0.05%)", "3000 (0.3%)", "10000 (1%)"];
+    let fee_selection = Select::new("Select fee tier:", fee_options)
+        .with_help_message("Lower fees may have less liquidity")
+        .prompt()?;
+    
+    let fee_tier = match fee_selection {
+        "500 (0.05%)" => 500,
+        "3000 (0.3%)" => 3000,
+        "10000 (1%)" => 10000,
+        _ => 3000,
+    };
+    
+    // Slippage input
+    let slippage_input: f64 = CustomType::new("Enter slippage tolerance (%):")
+        .with_default(0.5)
+        .with_help_message("Default is 0.5% (recommended)")
+        .prompt()?;
+    
+    // Deadline input
+    let deadline_input: u64 = CustomType::new("Enter transaction deadline (seconds):")
+        .with_default(1800)
+        .with_help_message("Default is 1800 seconds (30 minutes)")
+        .prompt()?;
+    
+    // Private key input
+    let private_key = Text::new("Enter your private key:")
+        .with_help_message("This will be used to sign the transaction")
+        .prompt()?;
+    
+    let user_address = get_address_from_private_key(&private_key)?;
+    
+    // Convert amount to proper decimals for USDC (6 decimals)
+    let amount_in_wei = U256::from((amount_input * 1_000_000.0) as u64);
+    
+    // Convert slippage from percentage to basis points
+    let slippage_bps = (slippage_input * 100.0) as u16;
+    
+    let config = SwapConfig {
+        token_in: token_addresses.get(token_in).unwrap().parse()?,
+        token_out: token_addresses.get(token_out).unwrap().parse()?,
+        amount_in: amount_in_wei,
+        fee_tier: U256::from(fee_tier),
+        slippage_bps,
+        deadline_seconds: deadline_input,
+        recipient: user_address,
+        sqrt_price_limit: U256::ZERO,
+        private_key: private_key.clone(),
+    };
+    
+    println!("\n📋 Swap Configuration:");
+    println!("  From: {} → To: {}", token_in, token_out);
+    println!("  Amount: {} USDC", amount_input);
+    println!("  Fee Tier: {} basis points", fee_tier);
+    println!("  Slippage: {}%", slippage_input);
+    println!("  Deadline: {} seconds", deadline_input);
+    println!("  Recipient: {:?}", user_address);
+    
+    Ok(config)
 }
