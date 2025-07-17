@@ -2,7 +2,8 @@ use alloy::{  providers::ProviderBuilder, signers::local::PrivateKeySigner};
 use alloy::transports::http::reqwest::Url;
  use blockops::{
     erc20,
-    ether
+    ether,
+    chat 
 };
 use inquire::{Select};
 use inquire::error::InquireResult;
@@ -17,6 +18,15 @@ async fn main() -> InquireResult<()> {
     let signer_provider = ProviderBuilder::new()
             .wallet(private_key.clone())
             .connect_http(url);
+
+    let api_key = std::env::var("OPEN_AI_API_KEY").unwrap_or_else(|_| {
+        println!("OPEN_AI_API_KEY not found in environment variables");
+        String::new()
+    });
+    let open_ai_url = std::env::var("OPEN_AI_URL").unwrap_or_else(|_| {
+        "https://api.openai.com/v1/chat/completions".to_string()
+    });
+
 
     loop {
         let commands = vec![
@@ -33,8 +43,17 @@ async fn main() -> InquireResult<()> {
         match command.as_ref() {
             "Ether Transaction" => ether::run(&signer_provider).await?,
             "ERC20 Token" => erc20::run(&signer_provider).await?,
-            "DeFi (Swap) " => println!("Defi Transaction"),
-            "Chat With AI" => println!(" Chat with AI"),
+            "DeFI (Swap)" => println!("DeFI Transaction - Coming Soon!"),
+            "Chat with AI" => { 
+                if api_key.is_empty() {
+                    println!("OpenAI API key is not configured. Please set OPEN_AI_API_KEY in your .env file");
+                } else {
+                    match chat::interactive_chat(&api_key, &open_ai_url).await {
+                        Ok(_) => println!("Chat session completed"),
+                        Err(e) => println!("Chat error: {}", e),
+                    }
+                }
+            }
             "Exit" => {
                 println!("👋 Goodbye!");
                 break;

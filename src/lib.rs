@@ -6,3 +6,4 @@ pub mod blockchain;
 pub mod cli; 
 pub mod types;
 pub mod contracts; 
+pub mod chat;

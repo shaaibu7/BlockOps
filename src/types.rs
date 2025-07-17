@@ -10,7 +10,7 @@ impl  Model{
         }
     }
 }
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct  MessageResponse{
 pub role: String,
 pub content: String
@@ -37,3 +37,6 @@ impl OPenAiRequest{
             messages: Vec::new()
         }
     }}
+
+
+    
